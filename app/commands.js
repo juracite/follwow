@@ -13,6 +13,7 @@ var lang = "en";
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 exports.run = function(BLIZZARD_API_KEY) {
     const blizzardApp = blizzard.run(BLIZZARD_API_KEY);
+    const capitalizeFirstChar = str => str.charAt(0).toUpperCase() + str.substring(1);
 
     var commands = [
 
@@ -73,7 +74,7 @@ exports.run = function(BLIZZARD_API_KEY) {
 
         {
             command: "hf_pts",
-            description: "Show achievement points from a player [realm][player_name][eu/us]",
+            description: "Show achievement points from a player [realm][player_name][eu/us(optional)]",
             parameters: [],
             execute: function(message, params) {
                 var response = "Mmmh mmh, buuuggggg ... ... dunno why  .  y  .  y";
@@ -110,7 +111,7 @@ exports.run = function(BLIZZARD_API_KEY) {
 
         {
             command: "info",
-            description: "Show achievement points from a player [realm][player_name][eu/us]",
+            description: "Show achievement points from a player [realm][player_name][eu/us(optional)]",
             parameters: [],
             execute: function(message, params) {
                 var response = "Mmmh mmh, buuuggggg ... ... dunno why  .  y  .  y";
@@ -128,36 +129,73 @@ exports.run = function(BLIZZARD_API_KEY) {
                     } else if (lang === "fr") {
                         var response = "Missing parameter(s) (Realm or playername)";
                     }
+                } else if (params[3] != undefined) {
+                    if (params[4] != 'eu' && params[4] != 'us') {
+                        origin = 'eu';
+                    } else if (params[4] == undefined) {
+                        realm = params[1] + " " + params[2];
+                        playerName = params[3];
+                    } else {
+                        origin = params[4];
+                    }
                 }
 
-                if (origin != 'eu' || origin != 'us' || params[3] == undefined) {
+                if (origin != 'eu' && origin != 'us' || params[3] == undefined) {
                     origin = 'eu';
                 }
 
+                console.log(realm);
+
                 blizzardApp.wow.character(['profile', 'guild'], { realm: realm, name: playerName, origin: origin })
-                    .then(response => {
-                        process.env.achpts = response.data.achievementPoints.toString();
-                        process.env.guildName = response.data.guild.name.toString();
-                        process.env.level = response.data.level.toString();
-                        process.env.playerName = playerName.toString();
-                        console.log("Avant !");
+                    .then(async response => {
+
+                        AchievementPoints = response.data.achievementPoints.toString();
+                        if (response.data.guild == undefined) {
+                            guild = "N/A";
+                        } else {
+                            guild = response.data.guild.name.toString();
+                        }
+                        level = response.data.level.toString();
+                        playerName = playerName.toString();
+                        playerName = capitalizeFirstChar(playerName);
+                        if (guild.length > 17) {
+                            guild = guild.substring(0, 17) + "...";
+                        }
+
+                        if (lang === "en") {
+                            message.reply("Loading image...");
+                        } else if (lang === "fr") {
+                            message.reply("Génération de l'image...");
+                        }
 
                         const gen = require('./main');
-                        console.log(gen.genimg());
+                        const image = await gen.genimg(playerName, level, AchievementPoints, guild);
 
-                        console.log("Après !");
                         if (lang === "en") {
+                            let fileName = playerName + "." + image.ext;
+                            /*
                             const embed = new Discord.RichEmbed()
-                                .setTitle("Informations de votre personnage")
-                                .attachFile("./public/new-img.png");
+                                .setTitle("Informations de votre personnage");
+                            console.log('IMAGE_début');
+                            embed.attachFile(image.buffer, fileName);
+                            console.log('IMAGE_fin');
+                            */
 
-                            console.log(__dirname + "/../public/new-img.png");
-                            return message.reply({ embed });
+                            let attach = new Discord.Attachment(image.buffer, fileName);
+                            return message.channel.send(attach);
+                            //return message.channel.send({ embed });
                         } else if (lang === "fr") {
                             response = playerName + " a " + AchievementPoints + " points de haut-faits";
                             return message.reply(response)
                         }
-                        console.log("OKKKKKK");
+
+                    }).catch(err => {
+                        if (lang === "en") {
+                            return message.reply("Unable to find the player informations." + " Reason : " + err.response.data.reason);
+                        } else if (lang === "fr") {
+                            return message.reply("Impossible de trouver le personnage." + " Raison : " + err.response.data.reason);
+                        }
+
                     });
             }
         },
